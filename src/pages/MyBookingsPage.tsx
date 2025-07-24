@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase';
 import { useContent } from '../hooks/useContent';
 import AnimatedSection from '../components/AnimatedSection';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { Calendar, Clock, User, ArrowRight, Filter } from 'lucide-react';
+import { Calendar, Clock, User, ArrowRight, Filter, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useBooking } from '../contexts/BookingContext';
 import toast from 'react-hot-toast';
 
 interface Booking {
@@ -28,6 +29,7 @@ interface Booking {
 const MyBookingsPage: React.FC = () => {
   const { user } = useAuth();
   const { getContent } = useContent();
+  const { cancelBooking } = useBooking();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [filteredBookings, setFilteredBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,6 +128,24 @@ const MyBookingsPage: React.FC = () => {
     return booking.status === 'pending' || booking.status === 'code_sent';
   };
 
+  const canCancelBooking = (booking: Booking) => {
+    return booking.status === 'pending';
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to cancel this booking? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await cancelBooking(bookingId);
+      toast.success('Booking cancelled successfully');
+      fetchBookings(); // Refresh the bookings list
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel booking');
+    }
+  };
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -285,6 +305,16 @@ const MyBookingsPage: React.FC = () => {
                               Resume Booking
                               <ArrowRight className="w-4 h-4 ml-1" />
                             </Link>
+                          )}
+                          
+                          {canCancelBooking(booking) && (
+                            <button
+                              onClick={() => handleCancelBooking(booking.id)}
+                              className="bg-red-500 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-red-600 transition-colors inline-flex items-center justify-center"
+                            >
+                              <X className="w-4 h-4 mr-1" />
+                              Cancel
+                            </button>
                           )}
                           
                           <button

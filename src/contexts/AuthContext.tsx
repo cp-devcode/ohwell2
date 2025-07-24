@@ -7,13 +7,14 @@ interface User {
   id: string;
   email: string;
   name: string;
+  whatsapp?: string;
   role: 'admin' | 'staff' | 'customer';
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (email: string, password: string, name: string, whatsapp: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -58,14 +59,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const mapSupabaseUser = (supabaseUser: SupabaseUser): User => {
-    // Check if this is the admin user
-    const isAdminEmail = supabaseUser.email === 'admin@desk4u.com';
+    // Get user metadata
+    const metadata = supabaseUser.user_metadata || {};
     
     return {
       id: supabaseUser.id,
       email: supabaseUser.email || '',
-      name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
-      role: isAdminEmail ? 'admin' : 'customer'
+      name: metadata.name || supabaseUser.email?.split('@')[0] || 'User',
+      whatsapp: metadata.whatsapp,
+      role: metadata.role || 'customer'
     };
   };
 
@@ -80,7 +82,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) throw error;
 
       if (data.user) {
-        setUser(mapSupabaseUser(data.user));
+        // Fetch user profile from database to get complete info including role
+        const { data: userProfile, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError) {
+          // If no profile exists, create one
+          const newUser = mapSupabaseUser(data.user);
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              id: data.user.id,
+              email: newUser.email,
+              name: newUser.name,
+              whatsapp: newUser.whatsapp,
+              role: newUser.role
+            });
+          
+          if (insertError) console.error('Error creating user profile:', insertError);
+          setUser(newUser);
+        } else {
+          setUser({
+            id: userProfile.id,
+            email: userProfile.email,
+            name: userProfile.name,
+            whatsapp: userProfile.whatsapp,
+            role: userProfile.role
+          });
+        }
       }
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Login failed');
@@ -89,7 +121,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const register = async (email: string, password: string, name: string) => {
+  const register = async (email: string, password: string, name: string, whatsapp: string) => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -98,6 +130,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         options: {
           data: {
             name: name,
+            whatsapp: whatsapp,
+            role: 'customer'
           },
         },
       });
@@ -105,7 +139,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) throw error;
 
       if (data.user) {
-        setUser(mapSupabaseUser(data.user));
+        // Create user profile in database
+        const newUser = {
+          id: data.user.id,
+          email: email,
+          name: name,
+          whatsapp: whatsapp,
+          role: 'customer' as const
+        };
+
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert(newUser);
+        
+        if (insertError) {
+          console.error('Error creating user profile:', insertError);
+        }
+
+        setUser(newUser);
       }
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Registration failed');

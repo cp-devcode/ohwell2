@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, Phone, Mail, MessageCircle, X } from 'lucide-react';
+import { Calendar, Clock, User, Phone, Mail, MessageCircle, X, Search, Plus } from 'lucide-react';
 import { useBooking } from '../contexts/BookingContext';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase'; // assuming supabase is configured like in the working code
@@ -24,6 +24,14 @@ const convertDurationToHours = (duration: string, totalSlots: number): number =>
   }
 };
 
+interface ClientUser {
+  id: string;
+  email: string;
+  name: string;
+  whatsapp?: string;
+  role: 'admin' | 'staff' | 'customer';
+}
+
 const AdminBookingForm: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
@@ -33,6 +41,11 @@ const AdminBookingForm: React.FC<{
   const [hourlySlots, setHourlySlots] = useState<string[]>([]);
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [clients, setClients] = useState<ClientUser[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClient, setSelectedClient] = useState<ClientUser | null>(null);
+  const [showClientSearch, setShowClientSearch] = useState(false);
+  const [creatingNewClient, setCreatingNewClient] = useState(false);
   const [formData, setFormData] = useState({
     workspaceType: '',
     date: '',
@@ -43,6 +56,7 @@ const AdminBookingForm: React.FC<{
     customerPhone: '',
     customerWhatsapp: '',
   });
+  const [newClientData, setNewClientData] = useState({ name: '', email: '', whatsapp: '', phone: '' });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const totalDesks = 6; // Assuming this is fixed, like in the working example
@@ -59,6 +73,7 @@ const AdminBookingForm: React.FC<{
   // Fetch workspace types and hourly slots
   useEffect(() => {
     fetchWorkspaceTypes();
+    fetchClients();
   }, []);
 
   useEffect(() => {
@@ -68,6 +83,124 @@ const AdminBookingForm: React.FC<{
       setBookedSlots([]);
     }
   }, [formData.workspaceType, formData.date, formData.duration]);
+
+  // Fetch clients for search
+  const fetchClients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, name, whatsapp, role')
+        .eq('role', 'customer')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setClients(data || []);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
+  // Filter clients based on search term
+  const filteredClients = clients.filter(client =>
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (client.whatsapp && client.whatsapp.includes(searchTerm))
+  );
+
+  // Handle client selection
+  const handleClientSelect = (client: ClientUser) => {
+    setSelectedClient(client);
+    setFormData(prev => ({
+      ...prev,
+      customerName: client.name,
+      customerEmail: client.email,
+      customerWhatsapp: client.whatsapp || '',
+      customerPhone: '' // We don't store phone in user profile, so leave empty
+    }));
+    setShowClientSearch(false);
+    setSearchTerm('');
+  };
+
+  // Create new client
+  const createNewClient = async () => {
+    if (!newClientData.name || !newClientData.email || !newClientData.whatsapp) {
+      alert('Please fill in all required fields for the new client');
+      return;
+    }
+
+    try {
+      setCreatingNewClient(true);
+      
+      // Generate random password
+      const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+      
+      // Create auth user
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newClientData.email,
+        password: randomPassword,
+        user_metadata: {
+          name: newClientData.name,
+          whatsapp: newClientData.whatsapp,
+          role: 'customer'
+        }
+      });
+
+      if (authError) throw authError;
+
+      // Create user profile
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: newClientData.email,
+          name: newClientData.name,
+          whatsapp: newClientData.whatsapp,
+          role: 'customer'
+        })
+        .select()
+        .single();
+
+      if (userError) throw userError;
+
+      // Send notification with credentials
+      try {
+        await fetch('https://aibackend.cp-devcode.com/webhook/1ef572d1-3263-4784-bc19-c38b3fbc09d0', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'new_client_created',
+            clientData: {
+              name: newClientData.name,
+              email: newClientData.email,
+              whatsapp: newClientData.whatsapp,
+              phone: newClientData.phone,
+              password: randomPassword
+            },
+            createdBy: user?.name || 'Admin',
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (webhookError) {
+        console.error('Webhook failed:', webhookError);
+      }
+
+      // Update clients list and select the new client
+      await fetchClients();
+      handleClientSelect(userData);
+      
+      // Reset form
+      setNewClientData({ name: '', email: '', whatsapp: '', phone: '' });
+      setCreatingNewClient(false);
+      
+      alert(`New client created successfully! Password: ${randomPassword}\nCredentials have been sent via notification.`);
+    } catch (error) {
+      console.error('Error creating new client:', error);
+      alert('Failed to create new client. Please try again.');
+      setCreatingNewClient(false);
+    }
+  };
 
   // Fetch workspace types from the database
   const fetchWorkspaceTypes = async () => {
@@ -348,6 +481,163 @@ const AdminBookingForm: React.FC<{
             {/* Customer Information */}
             <div>
               <h3 className="text-lg font-semibold text-black mb-4">Customer Information</h3>
+              
+              {/* Client Search/Selection */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-gray-900">Select Client</h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowClientSearch(!showClientSearch)}
+                    className="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                  >
+                    <Search className="w-4 h-4 mr-1" />
+                    {selectedClient ? 'Change Client' : 'Search Client'}
+                  </button>
+                </div>
+
+                {selectedClient && (
+                  <div className="bg-white p-3 rounded border mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{selectedClient.name}</p>
+                        <p className="text-sm text-gray-600">{selectedClient.email}</p>
+                        {selectedClient.whatsapp && (
+                          <p className="text-sm text-gray-600">WhatsApp: {selectedClient.whatsapp}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedClient(null);
+                          setFormData(prev => ({
+                            ...prev,
+                            customerName: '',
+                            customerEmail: '',
+                            customerWhatsapp: '',
+                            customerPhone: ''
+                          }));
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {showClientSearch && (
+                  <div className="space-y-3">
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Search by name, email, or WhatsApp..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowClientSearch(false)}
+                        className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md">
+                      {filteredClients.length === 0 ? (
+                        <div className="p-3 text-center text-gray-500">
+                          {searchTerm ? 'No clients found' : 'No clients available'}
+                        </div>
+                      ) : (
+                        filteredClients.map(client => (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => handleClientSelect(client)}
+                            className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium">{client.name}</div>
+                            <div className="text-sm text-gray-600">{client.email}</div>
+                            {client.whatsapp && (
+                              <div className="text-sm text-gray-600">WhatsApp: {client.whatsapp}</div>
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Create New Client Section */}
+                    <div className="border-t pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setCreatingNewClient(!creatingNewClient)}
+                        className="text-green-600 hover:text-green-800 text-sm flex items-center"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Create New Client
+                      </button>
+
+                      {creatingNewClient && (
+                        <div className="mt-3 p-3 bg-green-50 rounded border space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <input
+                              type="text"
+                              placeholder="Full Name *"
+                              value={newClientData.name}
+                              onChange={(e) => setNewClientData(prev => ({ ...prev, name: e.target.value }))}
+                              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <input
+                              type="email"
+                              placeholder="Email *"
+                              value={newClientData.email}
+                              onChange={(e) => setNewClientData(prev => ({ ...prev, email: e.target.value }))}
+                              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <input
+                              type="tel"
+                              placeholder="WhatsApp *"
+                              value={newClientData.whatsapp}
+                              onChange={(e) => setNewClientData(prev => ({ ...prev, whatsapp: e.target.value }))}
+                              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <input
+                              type="tel"
+                              placeholder="Phone"
+                              value={newClientData.phone}
+                              onChange={(e) => setNewClientData(prev => ({ ...prev, phone: e.target.value }))}
+                              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              type="button"
+                              onClick={createNewClient}
+                              disabled={creatingNewClient}
+                              className="bg-green-500 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50"
+                            >
+                              {creatingNewClient ? 'Creating...' : 'Create Client'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCreatingNewClient(false);
+                                setNewClientData({ name: '', email: '', whatsapp: '', phone: '' });
+                              }}
+                              className="bg-gray-500 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-600 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -359,8 +649,9 @@ const AdminBookingForm: React.FC<{
                     name="customerName"
                     value={formData.customerName}
                     onChange={handleChange}
+                    disabled={!!selectedClient}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -374,8 +665,9 @@ const AdminBookingForm: React.FC<{
                     name="customerEmail"
                     value={formData.customerEmail}
                     onChange={handleChange}
+                    disabled={!!selectedClient}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -404,8 +696,9 @@ const AdminBookingForm: React.FC<{
                     name="customerWhatsapp"
                     value={formData.customerWhatsapp}
                     onChange={handleChange}
+                    disabled={!!selectedClient}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>

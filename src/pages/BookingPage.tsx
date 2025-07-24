@@ -77,10 +77,10 @@ const BookingPage: React.FC = () => {
     date: '',
     timeSlot: '',
     duration: '',
-    customerName: '',
-    customerEmail: '',
+    customerName: user?.name || '',
+    customerEmail: user?.email || '',
     customerPhone: '',
-    customerWhatsapp: ''
+    customerWhatsapp: user?.whatsapp || ''
   });
 
   // Get dynamic settings
@@ -93,6 +93,18 @@ const BookingPage: React.FC = () => {
   useEffect(() => {
     fetchWorkspaceTypes();
   }, []);
+
+  // Update form data when user changes
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        customerName: user.name || '',
+        customerEmail: user.email || '',
+        customerWhatsapp: user.whatsapp || ''
+      }));
+    }
+  }, [user]);
 
   // Fetch booked slots when workspace type or date changes
   useEffect(() => {
@@ -577,7 +589,8 @@ const BookingPage: React.FC = () => {
                           value={formData.customerName}
                           onChange={handleChange}
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300"
+                          disabled={!!user}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         />
                       </div>
 
@@ -592,7 +605,8 @@ const BookingPage: React.FC = () => {
                           value={formData.customerEmail}
                           onChange={handleChange}
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300"
+                          disabled={!!user}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         />
                       </div>
 
@@ -622,7 +636,8 @@ const BookingPage: React.FC = () => {
                           value={formData.customerWhatsapp}
                           onChange={handleChange}
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300"
+                          disabled={!!user}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         />
                       </div>
                     </div>

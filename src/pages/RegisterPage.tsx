@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, MessageCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const RegisterPage: React.FC = () => {
@@ -11,6 +11,7 @@ const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    whatsapp: '',
     password: '',
     confirmPassword: ''
   });
@@ -38,7 +39,7 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
-      await register(formData.email, formData.password, formData.name);
+      await register(formData.email, formData.password, formData.name, formData.whatsapp);
       navigate('/');
     } catch (err) {
       setError('Registration failed. Please try again.');
@@ -104,6 +105,25 @@ const RegisterPage: React.FC = () => {
                   placeholder="Enter your email"
                 />
                 <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700">
+                WhatsApp Number
+              </label>
+              <div className="mt-1 relative">
+                <input
+                  id="whatsapp"
+                  name="whatsapp"
+                  type="tel"
+                  required
+                  value={formData.whatsapp}
+                  onChange={handleChange}
+                  className="appearance-none relative block w-full px-3 py-2 pl-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 focus:z-10 sm:text-sm"
+                  placeholder="Enter your WhatsApp number"
+                />
+                <MessageCircle className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               </div>
             </div>
 

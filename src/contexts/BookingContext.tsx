@@ -6,6 +6,7 @@ import { findAvailableDesk } from '../utils/bookingHelpers';
 interface BookingContextType {
   confirmBooking: (bookingId: string, confirmationCode: string) => Promise<void>;
   createAdminBooking: (bookingData: any) => Promise<void>;
+  cancelBooking: (bookingId: string) => Promise<void>;
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
@@ -200,14 +201,82 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       return data;
       
     } catch (error) {
+  const cancelBooking = async (bookingId: string) => {
+    try {
+      // Fetch the current booking from database
+      const { data: currentBooking, error: fetchError } = await supabase
+        .from('bookings')
+        .select()
+        .eq('id', bookingId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!currentBooking) throw new Error('Booking not found');
+
+      // Check if booking can be cancelled (only pending bookings)
+      if (currentBooking.status !== 'pending') {
+        throw new Error(`Cannot cancel booking with status: ${currentBooking.status}`);
+      }
+
+      // Check if user owns this booking
+      if (user && currentBooking.user_id !== user.id) {
+        throw new Error('You can only cancel your own bookings');
+      }
+    
+      // Update booking status to cancelled
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          status: 'cancelled',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', bookingId);
       console.error('Admin booking creation failed:', error);
+      if (error) throw error;
+      throw error;
+      // Send webhook notification
+      try {
+        await fetch('https://aibackend.cp-devcode.com/webhook/1ef572d1-3263-4784-bc19-c38b3fbc09d0', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'booking_cancelled_by_user',
+            bookingId: bookingId,
+            customerData: {
+              name: currentBooking.customer_name,
+              whatsapp: currentBooking.customer_whatsapp,
+              email: currentBooking.customer_email
+            },
+            bookingDetails: {
+              workspace_type: currentBooking.workspace_type,
+              date: currentBooking.date,
+              time_slot: currentBooking.time_slot,
+              duration: currentBooking.duration,
+              total_price: currentBooking.total_price
+            },
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (webhookError) {
+        console.error('Webhook failed:', webhookError);
+        // Don't fail the cancellation if webhook fails
+      }
+    }
+      console.log('Booking cancelled successfully');
+      
+    } catch (error) {
+      console.error('Booking cancellation failed:', error);
       throw error;
     }
+  };
   };
   return (
     <BookingContext.Provider value={{ 
       confirmBooking,
-      createAdminBooking
+      createAdminBooking,
+      cancelBooking
     }}>
       {children}
     </BookingContext.Provider>

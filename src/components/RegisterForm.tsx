@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, MessageCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface RegisterFormProps {
@@ -13,6 +13,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    whatsapp: '',
     password: '',
     confirmPassword: ''
   });
@@ -40,7 +41,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
     }
 
     try {
-      await register(formData.email, formData.password, formData.name);
+      await register(formData.email, formData.password, formData.name, formData.whatsapp);
       onSuccess();
     } catch (err) {
       setError('Registration failed. Please try again.');
@@ -86,6 +87,25 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
             placeholder="Enter your email"
           />
           <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700 mb-1">
+          WhatsApp Number
+        </label>
+        <div className="relative">
+          <input
+            id="whatsapp"
+            name="whatsapp"
+            type="tel"
+            required
+            value={formData.whatsapp}
+            onChange={handleChange}
+            className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+            placeholder="Enter your WhatsApp number"
+          />
+          <MessageCircle className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
       </div>
 
