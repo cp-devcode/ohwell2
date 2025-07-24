@@ -369,26 +369,6 @@ const AdminDashboard: React.FC = () => {
 
 export default AdminDashboard;
 
-ChatGPT said:
-Here’s the full cleaned-up and fixed version of your React component return block with consistent indentation, corrected JSX, and minor improvements for clarity and correctness.
-
-Notes on fixes:
-
-Ensured all JSX is properly wrapped.
-
-Fixed table structure so that the editing row (<tr>) appears inside the .map() properly (it was outside the <tr> which is invalid).
-
-Added key props correctly.
-
-Confirmed all handlers and variables like setShowAdminBookingForm, statsCards, activeTab, loading, etc. are assumed to be defined outside this snippet.
-
-Kept the icons like <Plus />, <Users /> assuming they are imported React components.
-
-Corrected any JSX props to be properly camelCased.
-
-jsx
-Copy
-Edit
 return (
   <div className="min-h-screen bg-gray-50">
     {/* Header */}
