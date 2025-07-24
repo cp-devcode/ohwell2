@@ -42,6 +42,8 @@ interface Booking {
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
+  const [editingBooking, setEditingBooking] = useState<string | null>(null);
+  const [editBookingData, setEditBookingData] = useState<Partial<Booking>>({});
   const { sendWebhook } = useBooking();
   const { getSetting, updateSetting, settings, loading: contentLoading } = useContent();
   const [activeTab, setActiveTab] = useState('bookings');
@@ -62,7 +64,7 @@ const AdminDashboard: React.FC = () => {
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
 
-  if (!user || user.role !== 'admin') {
+  if (!user || (user.role !== 'admin' && user.role !== 'staff')) {
     return <Navigate to="/login" replace />;
   }
 
@@ -277,6 +279,29 @@ const AdminDashboard: React.FC = () => {
     // Refresh bookings and stats after successful admin booking
     fetchBookings();
     fetchStats();
+  };
+
+  const updateBooking = async (bookingId: string) => {
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update(editBookingData)
+        .eq('id', bookingId);
+
+      if (error) throw error;
+
+      setEditingBooking(null);
+      setEditBookingData({});
+      alert('Booking updated successfully');
+      fetchBookings(); // Refresh bookings
+    } catch (error) {
+      console.error('Error updating booking:', error);
+      alert('Failed to update booking. Please try again.');
+    }
+  };
+
+  const canEditBooking = (status: string) => {
+    return status !== 'confirmed';
   };
 
   const saveSettings = async () => {
@@ -543,14 +568,111 @@ const AdminDashboard: React.FC = () => {
                                 </button>
                               </>
                             )}
-                            <button className="text-blue-600 hover:text-blue-900">
-                              <Edit className="w-4 h-4" />
-                            </button>
+                            {canEditBooking(booking.status) && (
+                              <button
+                                onClick={() => {
+                                  setEditingBooking(booking.id);
+                                  setEditBookingData(booking);
+                                }}
+                                className="text-blue-600 hover:text-blue-900"
+                                title="Edit booking"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
                             <button className="text-red-600 hover:text-red-900">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
+                        {editingBooking === booking.id && (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-4 bg-gray-50">
+                              <div className="space-y-4">
+                                <h4 className="font-semibold text-gray-900">Edit Booking</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                    <input
+                                      type="date"
+                                      value={editBookingData.date || ''}
+                                      onChange={(e) => setEditBookingData(prev => ({ ...prev, date: e.target.value }))}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot</label>
+                                    <input
+                                      type="text"
+                                      value={editBookingData.time_slot || ''}
+                                      onChange={(e) => setEditBookingData(prev => ({ ...prev, time_slot: e.target.value }))}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                                    <select
+                                      value={editBookingData.duration || ''}
+                                      onChange={(e) => setEditBookingData(prev => ({ ...prev, duration: e.target.value }))}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    >
+                                      <option value="1-hour">1 Hour</option>
+                                      <option value="2-hours">2 Hours</option>
+                                      <option value="4-hours">4 Hours</option>
+                                      <option value="1-day">1 Day</option>
+                                      <option value="1-week">1 Week</option>
+                                      <option value="1-month">1 Month</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                                    <input
+                                      type="text"
+                                      value={editBookingData.customer_name || ''}
+                                      onChange={(e) => setEditBookingData(prev => ({ ...prev, customer_name: e.target.value }))}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                    <input
+                                      type="email"
+                                      value={editBookingData.customer_email || ''}
+                                      onChange={(e) => setEditBookingData(prev => ({ ...prev, customer_email: e.target.value }))}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Total Price</label>
+                                    <input
+                                      type="number"
+                                      value={editBookingData.total_price || ''}
+                                      onChange={(e) => setEditBookingData(prev => ({ ...prev, total_price: parseFloat(e.target.value) }))}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => updateBooking(booking.id)}
+                                    className="bg-green-500 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-green-600 transition-colors"
+                                  >
+                                    Save Changes
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingBooking(null);
+                                      setEditBookingData({});
+                                    }}
+                                    className="bg-gray-500 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-600 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                       ))}
                     </tbody>
                   </table>
@@ -567,6 +689,7 @@ const AdminDashboard: React.FC = () => {
             )}
 
             {activeTab === 'settings' && (
+              user.role === 'admin' ? (
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-6">Booking System Settings</h3>
                 
@@ -642,6 +765,11 @@ const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
               </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Settings are only accessible to administrators.</p>
+                </div>
+              )
             )}
           </div>
         </div>

@@ -79,7 +79,7 @@ const AdminClientProfilePage: React.FC = () => {
   const [editingBooking, setEditingBooking] = useState<string | null>(null);
   const [editBookingData, setEditBookingData] = useState<Partial<Booking>>({});
 
-  if (!user || user.role !== 'admin') {
+  if (!user || (user.role !== 'admin' && user.role !== 'staff')) {
     return <Navigate to="/login" replace />;
   }
 
@@ -152,6 +152,12 @@ const AdminClientProfilePage: React.FC = () => {
   };
 
   const updateClientRole = async () => {
+    // Only admins can update roles
+    if (user.role !== 'admin') {
+      alert('Only administrators can change user roles.');
+      return;
+    }
+    
     try {
       const { error } = await supabase
         .from('users')
@@ -369,18 +375,21 @@ const AdminClientProfilePage: React.FC = () => {
                           <select
                             value={newRole}
                             onChange={(e) => setNewRole(e.target.value)}
+                            disabled={user.role !== 'admin'}
                             className="text-sm border border-gray-300 rounded px-2 py-1"
                           >
                             <option value="customer">Customer</option>
                             <option value="staff">Staff</option>
                             <option value="admin">Admin</option>
                           </select>
-                          <button
-                            onClick={updateClientRole}
-                            className="text-green-600 hover:text-green-800"
-                          >
-                            <Save className="w-4 h-4" />
-                          </button>
+                          {user.role === 'admin' && (
+                            <button
+                              onClick={updateClientRole}
+                              className="text-green-600 hover:text-green-800"
+                            >
+                              <Save className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               setEditingRole(false);
@@ -396,12 +405,14 @@ const AdminClientProfilePage: React.FC = () => {
                           <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(client.role)}`}>
                             {client.role}
                           </span>
-                          <button
-                            onClick={() => setEditingRole(true)}
-                            className="text-gray-500 hover:text-gray-700"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
+                          {user.role === 'admin' && (
+                            <button
+                              onClick={() => setEditingRole(true)}
+                              className="text-gray-500 hover:text-gray-700"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
