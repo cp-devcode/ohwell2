@@ -24,7 +24,6 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const confirmBooking = async (bookingId: string, confirmationCode: string) => {
     try {
-      // Fetch the current booking from database
       const { data: currentBooking, error: fetchError } = await supabase
         .from('bookings')
         .select()
@@ -34,21 +33,19 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (fetchError) throw fetchError;
       if (!currentBooking) throw new Error('Booking not found');
 
-      // Check if booking status allows confirmation
       if (currentBooking.status !== 'code_sent') {
         throw new Error(`Booking status is ${currentBooking.status}. Code must be sent by admin first.`);
       }
 
-      // Verify confirmation code
       if (currentBooking.confirmation_code !== confirmationCode) {
         throw new Error('Invalid confirmation code');
       }
-    
-      // Update booking status to confirmed
+
       const { data, error } = await supabase
         .from('bookings')
         .update({
           confirmation_code: confirmationCode,
+          status: 'confirmed',
           updated_at: new Date().toISOString()
         })
         .eq('id', bookingId)
@@ -57,17 +54,14 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       if (error) throw error;
 
-      // Send webhook notification
       try {
         await fetch('https://aibackend.cp-devcode.com/webhook/1ef572d1-3263-4784-bc19-c38b3fbc09d0', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'booking_confirmed_by_customer',
-            bookingId: bookingId,
-            confirmationCode: confirmationCode,
+            bookingId,
+            confirmationCode,
             customerData: {
               name: currentBooking.customer_name,
               whatsapp: currentBooking.customer_whatsapp,
@@ -85,12 +79,11 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
         });
       } catch (webhookError) {
         console.error('Webhook failed:', webhookError);
-        // Don't fail the confirmation if webhook fails
       }
 
       console.log('Booking confirmed successfully:', data);
       return data;
-      
+
     } catch (error) {
       console.error('Booking confirmation failed:', error);
       throw error;
@@ -99,7 +92,6 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const createAdminBooking = async (bookingData: any) => {
     try {
-      // Get hourly slots and total desks from settings
       const { data: settingsData, error: settingsError } = await supabase
         .from('site_settings')
         .select('key, value')
@@ -113,12 +105,11 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       }, {} as Record<string, string>) || {};
 
       const totalDesks = parseInt(settings['total_desks'] || '6');
-      const hourlySlots = (settings['hourly_slots'] || '9:00 AM,10:00 AM,11:00 AM,12:00 PM,1:00 PM,2:00 PM,3:00 PM,4:00 PM,5:00 PM')
+      const hourlySlots = (settings['hourly_slots'] || '')
         .split(',')
         .map(slot => slot.trim())
-        .filter(slot => slot.length > 0);
+        .filter(Boolean);
 
-      // Fetch existing bookings for the same date and workspace type
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
         .select('time_slot, duration, desk_number')
@@ -128,7 +119,6 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       if (fetchError) throw fetchError;
 
-      // Find an available desk
       const assignedDeskNumber = findAvailableDesk(
         bookingData.timeSlot,
         bookingData.duration,
@@ -139,10 +129,9 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       );
 
       if (!assignedDeskNumber) {
-        throw new Error('No available desk found for the selected time slot and duration. Please choose a different time or date.');
+        throw new Error('No available desk found for the selected time slot and duration.');
       }
 
-      // Create the booking with confirmed status
       const { data, error } = await supabase
         .from('bookings')
         .insert({
@@ -155,7 +144,7 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
           customer_phone: bookingData.customerPhone,
           customer_whatsapp: bookingData.customerWhatsapp,
           total_price: bookingData.totalPrice,
-          status: 'confirmed', // Admin bookings are automatically confirmed
+          status: 'confirmed',
           user_id: user?.id || null,
           desk_number: assignedDeskNumber
         })
@@ -164,13 +153,10 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       if (error) throw error;
 
-      // Send webhook notification for admin booking
       try {
         await fetch('https://aibackend.cp-devcode.com/webhook/1ef572d1-3263-4784-bc19-c38b3fbc09d0', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'admin_booking_created',
             bookingId: data.id,
@@ -194,16 +180,19 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
         });
       } catch (webhookError) {
         console.error('Webhook failed:', webhookError);
-        // Don't fail the booking creation if webhook fails
       }
 
       console.log('Admin booking created successfully:', data);
       return data;
-      
+
     } catch (error) {
+      console.error('Admin booking creation failed:', error);
+      throw error;
+    }
+  };
+
   const cancelBooking = async (bookingId: string) => {
     try {
-      // Fetch the current booking from database
       const { data: currentBooking, error: fetchError } = await supabase
         .from('bookings')
         .select()
@@ -213,17 +202,14 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (fetchError) throw fetchError;
       if (!currentBooking) throw new Error('Booking not found');
 
-      // Check if booking can be cancelled (only pending bookings)
       if (currentBooking.status !== 'pending') {
         throw new Error(`Cannot cancel booking with status: ${currentBooking.status}`);
       }
 
-      // Check if user owns this booking
       if (user && currentBooking.user_id !== user.id) {
         throw new Error('You can only cancel your own bookings');
       }
-    
-      // Update booking status to cancelled
+
       const { error } = await supabase
         .from('bookings')
         .update({
@@ -231,19 +217,16 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
           updated_at: new Date().toISOString()
         })
         .eq('id', bookingId);
-      console.error('Admin booking creation failed:', error);
+
       if (error) throw error;
-      throw error;
-      // Send webhook notification
+
       try {
         await fetch('https://aibackend.cp-devcode.com/webhook/1ef572d1-3263-4784-bc19-c38b3fbc09d0', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'booking_cancelled_by_user',
-            bookingId: bookingId,
+            bookingId,
             customerData: {
               name: currentBooking.customer_name,
               whatsapp: currentBooking.customer_whatsapp,
@@ -261,23 +244,17 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
         });
       } catch (webhookError) {
         console.error('Webhook failed:', webhookError);
-        // Don't fail the cancellation if webhook fails
       }
-    }
+
       console.log('Booking cancelled successfully');
-      
     } catch (error) {
       console.error('Booking cancellation failed:', error);
       throw error;
     }
   };
-  };
+
   return (
-    <BookingContext.Provider value={{ 
-      confirmBooking,
-      createAdminBooking,
-      cancelBooking
-    }}>
+    <BookingContext.Provider value={{ confirmBooking, createAdminBooking, cancelBooking }}>
       {children}
     </BookingContext.Provider>
   );
