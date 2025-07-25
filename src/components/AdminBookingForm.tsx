@@ -124,7 +124,7 @@ const AdminBookingForm: React.FC<{
   // Create new client
   const createNewClient = async () => {
     if (!newClientData.name || !newClientData.email || !newClientData.whatsapp) {
-      alert('Please fill in all required fields for the new client');
+      toast.error('Please fill in all required fields for the new client');
       return;
     }
 
@@ -134,20 +134,29 @@ const AdminBookingForm: React.FC<{
       // Generate random password
       const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
       
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // First create user in auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newClientData.email,
         password: randomPassword,
-        user_metadata: {
-          name: newClientData.name,
-          whatsapp: newClientData.whatsapp,
-          role: 'customer'
+        options: {
+          data: {
+            name: newClientData.name,
+            whatsapp: newClientData.whatsapp,
+            role: 'customer'
+          }
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('Auth error:', authError);
+        throw new Error(`Failed to create user account: ${authError.message}`);
+      }
 
-      // Create user profile
+      if (!authData.user) {
+        throw new Error('Failed to create user account');
+      }
+
+      // Create user profile in database
       const { data: userData, error: userError } = await supabase
         .from('users')
         .insert({
@@ -160,7 +169,10 @@ const AdminBookingForm: React.FC<{
         .select()
         .single();
 
-      if (userError) throw userError;
+      if (userError) {
+        console.error('User profile error:', userError);
+        throw new Error(`Failed to create user profile: ${userError.message}`);
+      }
 
       // Send notification with credentials
       try {
@@ -178,12 +190,13 @@ const AdminBookingForm: React.FC<{
               phone: newClientData.phone,
               password: randomPassword
             },
-            createdBy: user?.name || 'Admin',
+            createdBy: 'Admin',
             timestamp: new Date().toISOString()
           })
         });
       } catch (webhookError) {
         console.error('Webhook failed:', webhookError);
+        // Don't fail the entire operation if webhook fails
       }
 
       // Update clients list and select the new client
@@ -192,12 +205,12 @@ const AdminBookingForm: React.FC<{
       
       // Reset form
       setNewClientData({ name: '', email: '', whatsapp: '', phone: '' });
-      setCreatingNewClient(false);
       
-      alert(`New client created successfully! Password: ${randomPassword}\nCredentials have been sent via notification.`);
+      toast.success(`New client created successfully! Password: ${randomPassword}`);
     } catch (error) {
       console.error('Error creating new client:', error);
-      alert('Failed to create new client. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to create new client. Please try again.');
+    } finally {
       setCreatingNewClient(false);
     }
   };
@@ -615,10 +628,17 @@ const AdminBookingForm: React.FC<{
                             <button
                               type="button"
                               onClick={createNewClient}
-                              disabled={creatingNewClient}
-                              className="bg-green-500 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50"
+                              disabled={creatingNewClient || !newClientData.name || !newClientData.email || !newClientData.whatsapp}
+                              className="bg-green-500 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {creatingNewClient ? 'Creating...' : 'Create Client'}
+                              {creatingNewClient ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                                  Creating...
+                                </>
+                              ) : (
+                                'Create Client'
+                              )}
                             </button>
                             <button
                               type="button"

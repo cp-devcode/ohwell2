@@ -62,7 +62,8 @@ const AdminClientsPage: React.FC = () => {
       filtered = filtered.filter(client => 
         client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (client.whatsapp && client.whatsapp.includes(searchTerm))
+        (client.whatsapp && client.whatsapp.includes(searchTerm)) ||
+        (client.phone && client.phone.includes(searchTerm))
       );
     }
 
@@ -117,7 +118,7 @@ const AdminClientsPage: React.FC = () => {
                 <Search className="w-5 h-5 text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Search by name, email, or WhatsApp..."
+                  placeholder="Search by name, email, phone, or WhatsApp..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"

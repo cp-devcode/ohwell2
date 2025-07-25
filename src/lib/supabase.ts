@@ -119,6 +119,7 @@ export type Database = {
           is_active: boolean
           created_at: string
           updated_at: string
+          whatsapp?: string
         }
         Insert: {
           id?: string
@@ -127,6 +128,7 @@ export type Database = {
           price: number
           price_unit: string
           image_url?: string | null
+          whatsapp?: string
           features?: string[]
           is_active?: boolean
           created_at?: string
@@ -135,6 +137,7 @@ export type Database = {
         Update: {
           id?: string
           name?: string
+          whatsapp?: string
           description?: string
           price?: number
           price_unit?: string
