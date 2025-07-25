@@ -193,7 +193,26 @@ const AdminDashboard: React.FC = () => {
   const fetchStats = async () => {
     try {
       const { data: bookingsData, error } = await supabase
-        .from('bookings')
+        .from('bookings')const { getTodaysBookingsBySlot } = useBooking();
+const [bookingStats, setBookingStats] = useState<{ slotBookings: any; totalDesks: number; hourlySlots: string[] } | null>(null);
+
+useEffect(() => {
+  const fetchBookings = async () => {
+    try {
+      const data = await getTodaysBookingsBySlot();
+      setBookingStats(data);
+    } catch (err) {
+      console.error('Failed to fetch slot bookings:', err);
+    }
+  };
+
+  fetchBookings();
+}, []);
+
+if (!bookingStats) return null; // Or a loader
+
+const { slotBookings, totalDesks, hourlySlots } = bookingStats;
+
         .select('status, total_price, created_at');
 
       if (error) throw error;
