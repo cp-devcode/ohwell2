@@ -192,8 +192,8 @@ const AdminDashboard: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const { data: bookingsData, error } = await supabase
-        .from('bookings')const { getTodaysBookingsBySlot } = useBooking();
+      const { data: bookingsData, error } = await supabase.from('bookings');
+        const { getTodaysBookingsBySlot } = useBooking();
 const [bookingStats, setBookingStats] = useState<{ slotBookings: any; totalDesks: number; hourlySlots: string[] } | null>(null);
 
 useEffect(() => {
