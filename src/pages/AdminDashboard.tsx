@@ -19,7 +19,8 @@ import {
   Mail,
   Save,
   MessageCircle,
-  Plus
+  Plus,
+  Clock
 } from 'lucide-react';
 
 interface Booking {
@@ -64,6 +65,10 @@ const AdminDashboard: React.FC = () => {
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
 
+  // Today's bookings visualization state
+  const [todaysBookings, setTodaysBookings] = useState<Booking[]>([]);
+  const [hourlySlots, setHourlySlots] = useState<string[]>([]);
+
   if (!user || (user.role !== 'admin' && user.role !== 'staff')) {
     return <Navigate to="/login" replace />;
   }
@@ -71,6 +76,8 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     fetchBookings();
     fetchStats();
+    fetchTodaysBookings();
+    fetchHourlySlots();
   }, []);
 
   // Load settings when content is loaded and settings are available
@@ -117,6 +124,43 @@ const AdminDashboard: React.FC = () => {
       supabase.removeChannel(bookingsSubscription);
     };
   }, [contentLoading, settings]);
+
+  const fetchTodaysBookings = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('date', today)
+        .in('status', ['pending', 'confirmed', 'code_sent']);
+
+      if (error) throw error;
+      setTodaysBookings(data || []);
+    } catch (error) {
+      console.error('Error fetching today\'s bookings:', error);
+    }
+  };
+
+  const fetchHourlySlots = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'hourly_slots')
+        .single();
+
+      if (error) throw error;
+      
+      const slots = data?.value ? 
+        data.value.split(',').map(slot => slot.trim()).filter(Boolean) :
+        ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
+      
+      setHourlySlots(slots);
+    } catch (error) {
+      console.error('Error fetching hourly slots:', error);
+      setHourlySlots(['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM']);
+    }
+  };
 
   const loadSettings = () => {
     console.log('Loading settings from:', settings);
@@ -281,22 +325,57 @@ const AdminDashboard: React.FC = () => {
     fetchStats();
   };
 
-  const updateBooking = async (bookingId: string) => {
+  const handleSaveBooking = async (bookingData: Partial<Booking>) => {
+    if (!editingBooking) return;
+    
     try {
       const { error } = await supabase
         .from('bookings')
-        .update(editBookingData)
-        .eq('id', bookingId);
+        .update({
+          date: bookingData.date,
+          time_slot: bookingData.time_slot,
+          duration: bookingData.duration,
+          customer_name: bookingData.customer_name,
+          customer_email: bookingData.customer_email,
+          customer_phone: bookingData.customer_phone,
+          customer_whatsapp: bookingData.customer_whatsapp,
+          total_price: bookingData.total_price,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingBooking);
 
       if (error) throw error;
 
       setEditingBooking(null);
       setEditBookingData({});
-      alert('Booking updated successfully');
-      fetchBookings(); // Refresh bookings
+      toast.success('Booking updated successfully');
+      fetchBookings();
+      fetchTodaysBookings(); // Refresh today's bookings visualization
     } catch (error) {
       console.error('Error updating booking:', error);
-      alert('Failed to update booking. Please try again.');
+      toast.error('Failed to update booking. Please try again.');
+    }
+  };
+
+  const handleDeleteBooking = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', bookingId);
+
+      if (error) throw error;
+
+      toast.success('Booking deleted successfully');
+      fetchBookings();
+      fetchTodaysBookings();
+    } catch (error) {
+      console.error('Error deleting booking:', error);
+      toast.error('Failed to delete booking. Please try again.');
     }
   };
 
@@ -332,6 +411,33 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setSettingsSaving(false);
     }
+  };
+
+  // Today's bookings visualization
+  const getTodaysBookingsBySlot = () => {
+    const slotBookings: Record<string, number> = {};
+    const totalDesks = parseInt(getSetting('total_desks', '6'));
+    
+    // Initialize all slots with 0 bookings
+    hourlySlots.forEach(slot => {
+      slotBookings[slot] = 0;
+    });
+    
+    // Count bookings for each slot
+    todaysBookings.forEach(booking => {
+      if (slotBookings.hasOwnProperty(booking.time_slot)) {
+        slotBookings[booking.time_slot]++;
+      }
+    });
+    
+    return { slotBookings, totalDesks };
+  };
+
+  const getSlotColor = (bookingCount: number, totalDesks: number) => {
+    if (bookingCount === 0) return 'bg-green-100 border-green-300 text-green-800';
+    if (bookingCount >= totalDesks) return 'bg-red-500 border-red-600 text-white';
+    if (bookingCount >= totalDesks * 0.8) return 'bg-orange-400 border-orange-500 text-white';
+    return 'bg-yellow-200 border-yellow-400 text-yellow-800';
   };
 
   const statsCards = [
@@ -398,6 +504,55 @@ const AdminDashboard: React.FC = () => {
 
     {/* Stats Cards */}
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Today's Bookings Visualization */}
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <div className="flex items-center mb-6">
+          <Clock className="w-6 h-6 text-yellow-500 mr-3" />
+          <h3 className="text-xl font-semibold text-gray-900">Today's Bookings Overview</h3>
+          <span className="ml-2 text-sm text-gray-500">({new Date().toLocaleDateString()})</span>
+        </div>
+        
+        <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3">
+          {(() => {
+            const { slotBookings, totalDesks } = getTodaysBookingsBySlot();
+            return hourlySlots.map((slot) => {
+              const bookingCount = slotBookings[slot] || 0;
+              const colorClass = getSlotColor(bookingCount, totalDesks);
+              
+              return (
+                <div
+                  key={slot}
+                  className={`p-3 rounded-lg border-2 text-center transition-all duration-200 hover:scale-105 ${colorClass}`}
+                >
+                  <div className="text-xs font-medium mb-1">{slot}</div>
+                  <div className="text-lg font-bold">{bookingCount}</div>
+                  <div className="text-xs opacity-75">/ {totalDesks}</div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+        
+        <div className="flex items-center justify-center mt-4 space-x-6 text-sm">
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-green-100 border border-green-300 rounded mr-2"></div>
+            <span>Available</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-yellow-200 border border-yellow-400 rounded mr-2"></div>
+            <span>Partially Booked</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-orange-400 border border-orange-500 rounded mr-2"></div>
+            <span>Nearly Full</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-red-500 border border-red-600 rounded mr-2"></div>
+            <span>Full</span>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {statsCards.map((stat, index) => (
           <div key={index} className="bg-white rounded-lg shadow-sm p-6">
@@ -663,7 +818,10 @@ const AdminDashboard: React.FC = () => {
                                       Save
                                     </button>
                                     <button
-                                      onClick={() => setEditingBooking(null)}
+                                      onClick={() => {
+                                        setEditingBooking(null);
+                                        setEditBookingData({});
+                                      }}
                                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md font-semibold hover:bg-gray-400 transition-colors"
                                     >
                                       Cancel
