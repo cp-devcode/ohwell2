@@ -7,11 +7,6 @@ interface BookingContextType {
   confirmBooking: (bookingId: string, confirmationCode: string) => Promise<void>;
   createAdminBooking: (bookingData: any) => Promise<void>;
   cancelBooking: (bookingId: string) => Promise<void>;
-  getTodaysBookingsBySlot: () => Promise<{
-    slotBookings: Record<string, number>;
-    totalDesks: number;
-    hourlySlots: string[];
-  }>;
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
@@ -258,63 +253,8 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
-  // ✅ NEW: Get today's bookings grouped by hourly time slot
-  const getTodaysBookingsBySlot = async () => {
-    const today = new Date().toISOString().split('T')[0]; // e.g. '2025-07-25'
-
-    const { data: settingsData, error: settingsError } = await supabase
-      .from('site_settings')
-      .select('key, value')
-      .in('key', ['hourly_slots', 'total_desks']);
-
-    if (settingsError) throw settingsError;
-
-    const settings = settingsData?.reduce((acc, setting) => {
-      acc[setting.key] = setting.value;
-      return acc;
-    }, {} as Record<string, string>) || {};
-
-    const totalDesks = parseInt(settings['total_desks'] || '6');
-    const hourlySlots = (settings['hourly_slots'] || '')
-      .split(',')
-      .map(slot => slot.trim())
-      .filter(Boolean);
-
-    const { data: bookingsToday, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('time_slot')
-      .eq('date', today)
-      .in('status', ['pending', 'confirmed', 'code_sent']);
-
-    if (bookingsError) throw bookingsError;
-
-    const slotBookings: Record<string, number> = {};
-
-    hourlySlots.forEach(slot => {
-      slotBookings[slot] = 0;
-    });
-
-    bookingsToday?.forEach(booking => {
-      const slot = booking.time_slot;
-      if (slot in slotBookings) {
-        slotBookings[slot] += 1;
-      }
-    });
-
-    return {
-      slotBookings,
-      totalDesks,
-      hourlySlots,
-    };
-  };
-
   return (
-    <BookingContext.Provider value={{
-      confirmBooking,
-      createAdminBooking,
-      cancelBooking,
-      getTodaysBookingsBySlot
-    }}>
+    <BookingContext.Provider value={{ confirmBooking, createAdminBooking, cancelBooking }}>
       {children}
     </BookingContext.Provider>
   );

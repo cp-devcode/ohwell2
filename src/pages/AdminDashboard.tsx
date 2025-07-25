@@ -193,26 +193,7 @@ const AdminDashboard: React.FC = () => {
   const fetchStats = async () => {
     try {
       const { data: bookingsData, error } = await supabase
-        .from('bookings')const { getTodaysBookingsBySlot } = useBooking();
-const [bookingStats, setBookingStats] = useState<{ slotBookings: any; totalDesks: number; hourlySlots: string[] } | null>(null);
-
-useEffect(() => {
-  const fetchBookings = async () => {
-    try {
-      const data = await getTodaysBookingsBySlot();
-      setBookingStats(data);
-    } catch (err) {
-      console.error('Failed to fetch slot bookings:', err);
-    }
-  };
-
-  fetchBookings();
-}, []);
-
-if (!bookingStats) return null; // Or a loader
-
-const { slotBookings, totalDesks, hourlySlots } = bookingStats;
-
+        .from('bookings')
         .select('status, total_price, created_at');
 
       if (error) throw error;
@@ -294,7 +275,7 @@ const { slotBookings, totalDesks, hourlySlots } = bookingStats;
       
       // Note: Real-time subscription will automatically update the UI
       
-      alert(Confirmation code ${confirmationCode} sent to customer via WhatsApp!);
+      alert(`Confirmation code ${confirmationCode} sent to customer via WhatsApp!`);
     } catch (error) {
       console.error('Error confirming booking:', error);
       alert('Failed to send confirmation code. Please try again.');
@@ -476,7 +457,7 @@ const { slotBookings, totalDesks, hourlySlots } = bookingStats;
     },
     {
       title: 'Monthly Revenue',
-      value: E£${stats.monthlyRevenue.toLocaleString()},
+      value: `E£${stats.monthlyRevenue.toLocaleString()}`,
       change: '+15%',
       icon: DollarSign,
       color: 'bg-yellow-500'
@@ -541,7 +522,7 @@ const { slotBookings, totalDesks, hourlySlots } = bookingStats;
               return (
                 <div
                   key={slot}
-                  className={p-3 rounded-lg border-2 text-center transition-all duration-200 hover:scale-105 ${colorClass}}
+                  className={`p-3 rounded-lg border-2 text-center transition-all duration-200 hover:scale-105 ${colorClass}`}
                 >
                   <div className="text-xs font-medium mb-1">{slot}</div>
                   <div className="text-lg font-bold">{bookingCount}</div>
@@ -576,7 +557,7 @@ const { slotBookings, totalDesks, hourlySlots } = bookingStats;
         {statsCards.map((stat, index) => (
           <div key={index} className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center">
-              <div className={${stat.color} p-3 rounded-lg}>
+              <div className={`${stat.color} p-3 rounded-lg`}>
                 <stat.icon className="w-6 h-6 text-white" />
               </div>
               <div className="ml-4">
